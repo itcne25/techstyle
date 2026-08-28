@@ -1,86 +1,35 @@
-# Git Workflow
- 
-## Branching Strategy
 
-Wir verwenden **GitHub Flow**.
- 
-- `main` enthält immer stabilen, produktionsfähigen Code.
+---
 
-- Änderungen erfolgen in separaten Branches.
+# CONTRIBUTING.md
 
-- Branch-Namen:
+```markdown
+# Contributing Guidelines
 
-  - `feature/<name>`
+Vielen Dank für deinen Beitrag zum TechStyle eCommerce Projekt.
 
-  - `bugfix/<name>`
+Damit die Zusammenarbeit im Team konsistent und nachvollziehbar bleibt, gelten folgende Regeln.
 
-  - `hotfix/<name>`
- 
-## Merge Strategy
+---
 
-Änderungen werden über Pull Requests gemerged.
- 
-Standard:
+# Branching-Strategie
 
-- **Squash Merge** für Features und Bugfixes
+Wir verwenden eine vereinfachte Git-Flow-Strategie.
 
-- **Rebase** nur lokal zum Aktualisieren eines Branches
+## Hauptbranches
 
-- Keine direkten Änderungen auf `main`
- 
-## Pull Requests
+- `main`
+  - Produktionsreifer Code
 
-Vor dem Merge:
- 
-- mindestens 1 Review
+- `develop`
+  - Integrationsbranch für neue Features
 
-- Tests erfolgreich
+---
 
-- keine Merge-Konflikte
+# Feature-Branches
 
-- verständliche Beschreibung
- 
-## Commits
+Namenskonvention:
 
-Wir verwenden **Conventional Commits**:
- 
 ```text
+feature/<kurze-beschreibung>
 
-feat: add shopping cart
-
-fix: correct checkout error
-
-docs: update README
-
-chore: update .gitignore
-
-```
- 
-## Releases
-
-Wir verwenden **Semantic Versioning**:
- 
-```text
-
-MAJOR.MINOR.PATCH
-
-```
- 
-Beispiele:
- 
-```text
-
-v1.0.0
-
-v1.1.0
-
-v1.1.1
-
-```
- 
-Releases werden aus `main` erstellt und mit einem Git-Tag versehen.
- 
-## Konflikte
-
-Merge-Konflikte löst grundsätzlich der Autor des Pull Requests. Danach werden die Tests erneut ausgeführt.
- 
