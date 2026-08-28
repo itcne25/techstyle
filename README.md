@@ -1,6 +1,3 @@
-u# README.md
-
-```markdown
 # TechStyle eCommerce
 
 TechStyle eCommerce ist eine Flask-basierte Webanwendung für einen modernen Online-Shop.

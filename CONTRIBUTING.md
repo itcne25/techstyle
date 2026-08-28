@@ -1,9 +1,3 @@
-
----
-
-# CONTRIBUTING.md
-
-```markdown
 # Contributing Guidelines
 
 Vielen Dank für deinen Beitrag zum TechStyle eCommerce Projekt.
@@ -32,4 +26,4 @@ Namenskonvention:
 
 ```text
 feature/<kurze-beschreibung>
-
+```
