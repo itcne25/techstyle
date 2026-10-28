@@ -12,6 +12,7 @@ env/
 # Flask
 instance/
 .env
+.env.container
 
 # Test / Coverage
 .pytest_cache/

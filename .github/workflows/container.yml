@@ -1,0 +1,78 @@
+name: Tag 13 - Container build, test and publish
+
+on:
+  push:
+    branches: [day_13_solution]
+  pull_request:
+    branches: [day_13_solution]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: container-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies and run application tests
+        run: |
+          pip install -r requirements-container.txt pytest
+          python -m pytest tests/ -v
+      - name: Configure disposable exercise stack
+        run: |
+          python - <<'PY'
+          import secrets
+          from pathlib import Path
+          Path('.env.container').write_text(
+              f'POSTGRES_PASSWORD={secrets.token_hex(32)}\n'
+              f'SECRET_KEY={secrets.token_hex(32)}\n', encoding='utf-8')
+          PY
+      - name: Build and start web and PostgreSQL
+        run: docker compose --env-file .env.container up --build -d --wait --wait-timeout 120
+      - name: Verify checkout and persistence across recreation
+        run: python scripts/container_smoke.py
+      - name: Show service logs on failure
+        if: failure()
+        run: docker compose --env-file .env.container logs --no-color
+      - name: Remove disposable CI stack and its test data
+        if: always()
+        run: docker compose --env-file .env.container down --volumes --remove-orphans
+
+  publish:
+    needs: verify
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/day_13_solution'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@v5
+        id: metadata
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=sha,format=long
+            type=raw,value=day13
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}
