@@ -1,0 +1,88 @@
+name: AI Code Review
+
+# Musterlösung Tag 12 Projekt: AI-Review bei Pull Requests, self-hosted.
+# Das Modell läuft als Service-Container im Runner — der Code verlässt GitHub
+# nicht, es braucht weder Account noch API-Key.
+# Spec: specs/ai-review.md — Entscheidung: docs/adr/0001-ai-review-in-der-pipeline.md
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths: ['**.py']
+
+permissions:
+  contents: read
+  pull-requests: write   # Kommentar im PR schreiben
+
+# Ein neuer Push auf denselben PR bricht den laufenden Review ab.
+concurrency:
+  group: ai-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  MODEL: gemma3:4b      # Modell-Version gepinnt (LLMOps)
+
+jobs:
+  ai-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      ollama:
+        image: ollama/ollama:0.34.4   # Image-Version gepinnt
+        ports: ['11434:11434']
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Modell laden
+        run: |
+          until curl -sf http://localhost:11434/api/version; do sleep 2; done
+          curl -sf --max-time 600 http://localhost:11434/api/pull \
+            -d "{\"model\": \"$MODEL\", \"stream\": false}"
+
+      # TODO 1: nur Python-Dateien, auf 6000 Zeichen begrenzt (Kontextfenster, Laufzeit).
+      # PR-Werte kommen über env:, nie direkt ins Skript (Script Injection).
+      - name: Diff der Python-Dateien holen
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git diff "origin/${BASE_REF}...HEAD" -- '*.py' | head -c 6000 > diff.txt
+
+      # Schritt 3: System-Prompt versioniert in prompts/, Diff zwischen
+      # <diff>-Begrenzern, temperature 0 + seed für reproduzierbare Antworten.
+      - name: AI-Review (lokales Modell)
+        run: |
+          jq -n --rawfile sys prompts/review-system.md --rawfile diff diff.txt --arg model "$MODEL" '{
+            model: $model, temperature: 0, seed: 42, max_tokens: 400,
+            messages: [
+              {role: "system", content: $sys},
+              {role: "user", content: ("<diff>\n" + $diff + "\n</diff>")}
+            ]
+          }' > request.json
+          # TODO 2: Fallback — Timeout oder Modellfehler bricht den Workflow nicht ab.
+          if curl -sf --max-time 300 http://localhost:11434/v1/chat/completions \
+               -H "Content-Type: application/json" \
+               -d @request.json > response.json \
+             && jq -er '.choices[0].message.content' response.json > review.md; then
+            echo "AI-Review erstellt."
+          else
+            echo "⚠️ AI-Review nicht verfügbar (Modell hat nicht rechtzeitig geantwortet). Bitte manuell reviewen." > review.md
+          fi
+
+      # TODO 3: AI-Hinweis im Kommentar.
+      - name: Kommentar im Pull Request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          {
+            echo "## 🤖 AI Code Review"
+            echo
+            cat review.md
+            echo
+            echo "---"
+            echo "*Dieser Review ist AI-generiert ($MODEL, lokal im Runner) und kein Ersatz für menschliches Code Review.*"
+          } > comment.md
+          gh pr comment "$PR" --body-file comment.md

@@ -1,0 +1,42 @@
+name: AI Prompt Eval
+
+# Regressionstest für den System-Prompt: Jede Änderung an prompts/ oder evals/
+# läuft gegen die Testfälle in evals/cases/. Fällt ein Fall durch, wird der
+# Check rot — wie ein Unit-Test für Code.
+
+on:
+  pull_request:
+    paths: ['prompts/**', 'evals/**', '.github/workflows/ai-*.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  MODEL: gemma3:4b      # dasselbe Modell wie im Review-Workflow
+
+jobs:
+  prompt-eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      ollama:
+        image: ollama/ollama:0.34.4
+        ports: ['11434:11434']
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Modell laden
+        run: |
+          until curl -sf http://localhost:11434/api/version; do sleep 2; done
+          curl -sf --max-time 600 http://localhost:11434/api/pull \
+            -d "{\"model\": \"$MODEL\", \"stream\": false}"
+
+      - name: Evals ausführen
+        run: bash evals/run.sh
+
+      - name: Antworten in die Job-Zusammenfassung
+        if: always()
+        run: |
+          { echo "## Prompt-Eval ($MODEL)"; echo; cat eval-report.md 2>/dev/null; } >> "$GITHUB_STEP_SUMMARY"
