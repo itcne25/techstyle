@@ -1,5 +1,10 @@
 # TechStyle Online Shop
 
+## Tag 14 – AWS-Deployment
+
+Die Pipeline für Tests, ECR und EC2 sowie Einrichtung, Betrieb und offene
+Laufnachweise sind in [DEPLOYMENT.md](DEPLOYMENT.md) dokumentiert.
+
 ## Tag 13 – Container-Musterlösung
 
 Die vollständige Anleitung mit Architekturvergleich, Voraussetzungen, Startbefehlen,
