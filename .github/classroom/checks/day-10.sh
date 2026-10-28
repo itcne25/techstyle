@@ -1,24 +1,5 @@
 #!/bin/bash
-source .github/classroom/grade.sh
-
-echo "🔍 Prüfe Abnahmekriterien für Tag 10 — Alerting & Dashboards"
-echo ""
-
-check_file_contains \
-  "ci-workflow" \
-  "Alert-Rules oder Alert-Konfiguration vorhanden" \
-  "prometheus/rules.yml|rules.yml|app.py|README.md" \
-  "alert|rule|threshold|trigger"
-
-check_file_exists \
-  "ci-workflow" \
-  "Dashboard-Definition vorhanden" \
-  "grafana/dashboards/*.json|dashboards/*.json"
-
-check_file_contains \
-  "ci-workflow" \
-  "Alerting-Dokumentation existiert" \
-  "README.md|docs/monitoring.md|docs/alerts.md" \
-  "alert|notification|on-call"
-
-summary 10
+# Die bereitgestellte Tagesplanung sagt im Projektabschnitt ausdrücklich "Nichts".
+echo "Tag 10 hat keinen separaten Projektauftrag."
+echo "Das Prometheus-/Grafana-Setup gehört zur Praxis und ist Voraussetzung für Tag 11."
+echo "Dieser Check bewertet weder dessen Installation noch ein laufendes Dashboard."

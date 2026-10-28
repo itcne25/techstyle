@@ -1,24 +1,10 @@
 #!/bin/bash
 source .github/classroom/grade.sh
 
-echo "🔍 Prüfe Abnahmekriterien für Tag 6 — Testing & Code Quality"
-echo ""
-
-check_file_exists \
-  "testing" \
-  "Test-Dateien vorhanden (tests/ oder test_*.py)" \
-  "tests/*.py|test_*.py|*_test.py"
-
-check_file_contains \
-  "testing" \
-  "pytest oder Unittest importiert" \
-  "tests/*.py|test_*.py|conftest.py" \
-  "pytest|unittest|test_"
-
-check_file_contains \
-  "testing" \
-  "Quality Gate konfiguriert (SonarQube/Codecov)" \
-  ".github/workflows/ci.yml|sonar-project.properties" \
-  "sonar|codecov|quality|coverage"
-
+echo "Tag 06 – Artefaktverwaltung"
+echo "Ein konkretes Artefakt zusätzlich herunterladen und inspizieren; Dateiprüfungen belegen diesen Schritt nicht."
+check_file_exists "version" "Python-Build konfiguriert" "pyproject.toml"
+check_file_contains "ci-workflow" "Paket-Build im Workflow" ".github/workflows/ci.yml" "python -m build"
+check_file_contains "ci-workflow" "Temporäres Artefakt wird hochgeladen" ".github/workflows/ci.yml" "actions/upload-artifact"
+check_file_contains "readme" "Registry-Entscheidung dokumentiert" "docs/DAY_6_COMPLETION.md" "pypiserver"
 summary 6

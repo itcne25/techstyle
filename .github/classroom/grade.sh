@@ -248,11 +248,42 @@ check() {
   fi
 }
 
+# Several inherited checks use alternatives (a|b) and globs. Resolve those
+# explicitly instead of treating the complete expression as one literal path.
+matching_files() {
+  local expression="$1" candidate file
+  local -a alternatives
+  IFS='|' read -r -a alternatives <<< "$expression"
+  for candidate in "${alternatives[@]}"; do
+    while IFS= read -r file; do
+      [ -f "$file" ] && printf '%s\n' "$file"
+    done < <(compgen -G "$candidate")
+  done
+}
+
+any_file_exists() {
+  local file
+  while IFS= read -r file; do
+    [ -f "$file" ] && return 0
+  done < <(matching_files "$1")
+  return 1
+}
+
+any_file_contains() {
+  local expression="$1" pattern="$2" file
+  while IFS= read -r file; do
+    grep -qiE -- "$pattern" "$file" && return 0
+  done < <(matching_files "$expression")
+  return 1
+}
+
 check_file_exists() {
   local id="$1"
   local description="$2"
   local filepath="$3"
-  check "$id" "$description" "[ -f '$filepath' ]"
+  local condition
+  printf -v condition 'any_file_exists %q' "$filepath"
+  check "$id" "$description" "$condition"
 }
 
 check_file_contains() {
@@ -260,15 +291,16 @@ check_file_contains() {
   local description="$2"
   local filepath="$3"
   local pattern="$4"
-  check "$id" "$description" "grep -qiE '$pattern' '$filepath' 2>/dev/null"
+  local condition
+  printf -v condition 'any_file_contains %q %q' "$filepath" "$pattern"
+  check "$id" "$description" "$condition"
 }
 
 check_workflow_exists() {
   local id="$1"
   local description="$2"
   local pattern="$3"
-  # grep -q stellt sicher, dass ein leeres ls-Ergebnis auch wirklich fehlschlaegt
-  check "$id" "$description" "ls -1 .github/workflows/$pattern 2>/dev/null | grep -q ."
+  check_file_exists "$id" "$description" ".github/workflows/$pattern"
 }
 
 check_directory_exists() {
@@ -298,11 +330,11 @@ summary() {
 
   if [ "$FAIL" -gt 0 ]; then
     echo ""
-    echo "::error title=Tag $day nicht bestanden::$FAIL von $((PASS + FAIL)) Kriterien nicht erfüllt. Siehe Details oben."
+    echo "::error title=Tag $day Strukturprüfung fehlgeschlagen::$FAIL von $((PASS + FAIL)) Repo-Checks nicht erfüllt. Siehe Details oben."
     exit 1
   else
     echo ""
-    echo "::notice title=✅ Tag $day bestanden::Gratuliere! Alle Kriterien erfüllt."
+    echo "::notice title=Tag $day Strukturprüfung bestanden::Repo-Checks erfüllt. Laufende Dienste und manuelle Nachweise separat prüfen."
   fi
 }
 

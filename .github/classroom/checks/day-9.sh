@@ -1,23 +1,8 @@
 #!/bin/bash
 source .github/classroom/grade.sh
 
-echo "🔍 Prüfe Abnahmekriterien für Tag 9 — Monitoring Grundlagen (Prometheus/Grafana)"
-echo ""
-
-check_file_exists \
-  "ci-workflow" \
-  "Prometheus-Konfiguration vorhanden" \
-  "prometheus.yml|monitoring/prometheus.yml|docs/monitoring.md"
-
-check_file_contains \
-  "ci-workflow" \
-  "Prometheus oder Metriken erwähnt" \
-  "README.md|docs/*.md|app.py" \
-  "prometheus|metrics|scrape|monitoring"
-
-check_file_exists \
-  "ci-workflow" \
-  "Grafana-Konfiguration oder Dashboard vorhanden" \
-  "grafana/dashboards/*.json|dashboards/*.json|monitoring/grafana.yml"
-
+echo "Tag 09 – Projektaufträge Tag 01–07 aufarbeiten"
+echo "Kein neuer Prometheus-/Grafana-Projektauftrag. Offene Aufgaben und Retro manuell bewerten."
+check_file_exists "readme" "Bestandsaufnahme der bisherigen Projektaufträge vorhanden" "docs/PROJECT_AUDIT_DAYS_01_12.md"
+check_file_contains "readme" "Nächste überprüfbare Schritte erfasst" "docs/PROJECT_AUDIT_DAYS_01_12.md" "Abschlussbeleg"
 summary 9
