@@ -49,7 +49,7 @@ Die Branches `day_X_checkpoint` und `day_X_solution` dienen dem DevOps-Kurs als 
    git branch -d feature/<name>
    ```
 
-Direkte Pushes auf `main` sind nicht vorgesehen. Änderungen sollen über Pull Requests nachvollziehbar und reviewbar bleiben.
+Änderungen sollen über Pull Requests nachvollziehbar und reviewbar bleiben. Für ausdrücklich beauftragte Kursdemonstrationen darf direkt auf `main` gepusht werden; Tag 14 nutzt diesen Push als Deployment-Auslöser. Das ersetzt keine erforderliche Teamfreigabe und ist keine allgemeine Ausnahme für ungeprüfte Änderungen.
 
 ## Merge-Strategie
 
@@ -118,7 +118,7 @@ Vor dem Erstellen eines Pull Requests muss die Anwendung lokal gestartet und der
 ./run_dev.sh
 ```
 
-Mindestens die geänderten Funktionen sind manuell zu testen. Neue oder geänderte Logik soll zusätzlich durch automatisierte Tests abgedeckt werden, sobald eine Test-Suite vorhanden ist. Fehlerhafte Tests oder bekannte Einschränkungen werden im Pull Request dokumentiert.
+Mindestens die geänderten Funktionen sind zu prüfen. Die bestehende Suite wird mit `python -m pytest tests/ -v` ausgeführt; `python -m flake8 tests/ conftest.py --max-line-length=100 --ignore=E302,W503` entspricht dem CI-Linter. Neue oder geänderte Logik soll durch passende automatisierte Tests abgedeckt werden. Fehlerhafte Tests oder bekannte Einschränkungen werden im Pull Request dokumentiert.
 
 ## Release-Versionierung
 

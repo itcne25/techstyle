@@ -1,5 +1,7 @@
 # Tag 13 – Container-Musterlösung für TechStyle
 
+> Dieses Team-Repository hat die folgende Referenzlösung als Wiedereinstieg übernommen. Der anschliessende AWS-Ausbau und seine Nachweise stehen in [DEPLOYMENT.md](../DEPLOYMENT.md). Die untenstehenden Unterrichtshinweise beschreiben die Herkunft der Lösung.
+
 ## Einordnung im Unterricht
 
 Du bearbeitest den Projektauftrag in Deinem eigenen Team-Repository, das Ihr an Tag01 angelegt und seither weiterentwickelt habt. Ausgangspunkt ist Euer aktueller Projektstand. Dieses Repository und die Branches `day_xx_solution` enthalten Musterlösungen. Sie dienen zum Vergleichen, als Hilfe und jederzeit als optionale Wiedereinstiegspunkte, falls Euer Projekt nicht funktioniert. `day_12_solution` ist die Musterlösung zu Tag12 und kein verpflichtender Startstand für Tag13.

@@ -1,5 +1,5 @@
 #!/bin/bash
-# deploy.sh — The TechStyle deployment script
+# Historisches Lehrbeispiel; aktuelles Deployment siehe DEPLOYMENT.md.
 #
 # Usage: ./deploy.sh
 #

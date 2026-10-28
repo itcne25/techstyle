@@ -52,7 +52,7 @@ Die Angaben stammen aus den GitHub-Actions-Läufen und den Prüfungen auf EC2.
 - Zweiter grüner Workflowlauf nach sichtbarer Änderung: [Commit `9d260c1`](https://github.com/itcne25/techstyle/actions/runs/40686928216). Vorher fehlte die Überschrift „TechStyle Collection“, danach war sie auf EC2 sichtbar.
 - ECR-Image-URI des zweiten Laufs: `524744059708.dkr.ecr.us-east-1.amazonaws.com/ts/prod-images:9d260c1efbb7810ec06dac8eab669bfcbe3b4e9b`.
 - Shop-URL: <http://13.218.35.147/>; der Shop wurde im Browser geöffnet. `/healthz` antwortete auf EC2 mit `{"status":"ok"}`. Der öffentliche Healthcheck des GitHub-Workflows war erfolgreich.
-- Rollback auf `f822899`: **ausstehend**.
+- Rollback auf `f822899`: **bewusst nicht getestet**; hierfür wird kein erfolgreicher Nachweis beansprucht.
 
 ## Ausblick: ECS
 

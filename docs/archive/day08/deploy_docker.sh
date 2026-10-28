@@ -1,5 +1,5 @@
 #!/bin/bash
-# deploy_docker.sh - Deploy TechStyle to EC2 with Docker Compose.
+# Historisches Tag-08-Beispiel; aktuelles Deployment siehe DEPLOYMENT.md.
 #
 # Required:
 #   EC2_HOST=<public-ip-or-dns>

@@ -1,5 +1,7 @@
 # Day 4 Completion — CI Fundamentals & GitHub Actions
 
+> Übernommene CI-Grundlage. Der aktuelle Teamstand und fehlende historische Laufnachweise stehen im [Projektabgleich](PROJECT_AUDIT_DAYS_01_12.md). Die Tests verwenden seit Tag 13 echte SQL-Abfragen gegen eine isolierte temporäre SQLite-Datenbank, statt den Datenbankzugriff vollständig zu mocken.
+
 ## Prerequisite Files ("Vorbereitung")
 
 `day_4_checkpoint` ships without tests and without test dependencies, so the Vorbereitung step in Tag04.md is genuinely required: without `tests/`, `conftest.py` and the added `pytest` / `pytest-mock` / `flake8` entries in `requirements.txt`, the lint job fails on missing paths and the test job has nothing to run. No `__init__.py` files are needed under `tests/` — the root `conftest.py` alone makes `from app import app` resolve.
@@ -15,7 +17,7 @@
 - Created `tests/test_app.py` with unit test for the home page route
 - Created `tests/integration/test_workflow.py` with integration test for the registration flow
 - Added `conftest.py` in the project root so `pytest tests/` can import `app` (pytest puts the directory of every `conftest.py` on the Python path — without it, collection fails with `ModuleNotFoundError: No module named 'app'`)
-- Tests mock the database layer (`app.get_db`) so no real DB is needed in CI
+- Tests use an isolated SQLite database per test, with no external database server needed in CI
 
 ### Task 3: Code Quality & Linter Integration ✅
 - Added `flake8` to `requirements.txt` for code style enforcement
@@ -37,7 +39,7 @@
 - [x] CI pipeline triggers on push to `main` and `day_*` branches
 - [x] Pipeline runs linter (flake8) on test code
 - [x] Pipeline runs unit and integration tests (pytest)
-- [x] Tests pass with mocked database (no real DB dependency)
+- [x] Tests use isolated test data and require no external database server
 - [x] Pipeline fails if tests fail (provides fast feedback)
 
 ## Testing Instructions
