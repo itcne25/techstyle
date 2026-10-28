@@ -18,4 +18,3 @@ Students completing the DevOps & Infrastructure module block at TBZ.
 **Important Notes**
 - Run the app-health-check-agent after each change to verify application health
 - When updating a solution branch, propagate changes to the corresponding checkpoint branch
-- Always keep changes on the Claude.md file and Files in the .claude folder consistens in all branches.
