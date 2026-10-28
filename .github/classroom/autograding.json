@@ -1,0 +1,14 @@
+{
+  "tests": [
+    {
+      "name": "Day-based classroom checks",
+      "setup": "chmod +x .github/classroom/grade.sh",
+      "run": "bash .github/classroom/grade.sh",
+      "input": "",
+      "output": "",
+      "comparison": "included",
+      "timeout": 600,
+      "points": 100
+    }
+  ]
+}
