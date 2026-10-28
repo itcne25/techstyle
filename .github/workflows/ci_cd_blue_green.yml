@@ -1,0 +1,320 @@
+name: CI/CD Blue-Green Deployment
+
+on:
+  push:
+    branches:
+      - day_8_solution
+    paths:
+      - ".github/workflows/ci_cd_blue_green.yml"
+      - "infrastruktur/blue_green.conf"
+      - "app.py"
+      - "seed_data.py"
+      - "requirements.txt"
+      - "Dockerfile"
+      - "docker-compose.yml"
+      - "deploy_docker.sh"
+      - "templates/**"
+      - "static/**"
+      - "tests/**"
+
+jobs:
+  config:
+    name: Konfiguration und Infrastruktur-Outputs lesen
+    runs-on: ubuntu-latest
+    outputs:
+      action: ${{ steps.config.outputs.action }}
+      deploy_target: ${{ steps.config.outputs.deploy_target }}
+      destroy: ${{ steps.config.outputs.destroy }}
+      blue_ec2_host: ${{ steps.outputs.outputs.blue_ec2_host }}
+      green_ec2_host: ${{ steps.outputs.outputs.green_ec2_host }}
+      aws_region: ${{ steps.outputs.outputs.aws_region }}
+      alb_dns_name: ${{ steps.outputs.outputs.alb_dns_name }}
+      alb_listener_arn: ${{ steps.outputs.outputs.alb_listener_arn }}
+      blue_target_group_arn: ${{ steps.outputs.outputs.blue_target_group_arn }}
+      green_target_group_arn: ${{ steps.outputs.outputs.green_target_group_arn }}
+
+    env:
+      TOFU_STATE_BUCKET: ${{ vars.TOFU_STATE_BUCKET }}
+      TOFU_OUTPUTS_KEY: techstyle/day_8_solution/outputs.json
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read pipeline configuration
+        id: config
+        run: |
+          test -f infrastruktur/destroy.conf || (echo "Missing infrastruktur/destroy.conf" && exit 1)
+          test -f infrastruktur/blue_green.conf || (echo "Missing infrastruktur/blue_green.conf" && exit 1)
+          grep -Eq '^destroy=(true|false)$' infrastruktur/destroy.conf || (echo "destroy.conf must contain destroy=true or destroy=false" && exit 1)
+          grep -Eq '^action=(deploy_only|deploy_and_switch|switch_only)$' infrastruktur/blue_green.conf || (echo "blue_green.conf must contain action=deploy_only, action=deploy_and_switch or action=switch_only" && exit 1)
+          grep -Eq '^deploy_target=(blue|green)$' infrastruktur/blue_green.conf || (echo "blue_green.conf must contain deploy_target=blue or deploy_target=green" && exit 1)
+
+          DESTROY="$(cut -d= -f2 infrastruktur/destroy.conf)"
+          ACTION="$(grep '^action=' infrastruktur/blue_green.conf | cut -d= -f2)"
+          DEPLOY_TARGET="$(grep '^deploy_target=' infrastruktur/blue_green.conf | cut -d= -f2)"
+
+          echo "destroy=$DESTROY" >> "$GITHUB_OUTPUT"
+          echo "action=$ACTION" >> "$GITHUB_OUTPUT"
+          echo "deploy_target=$DEPLOY_TARGET" >> "$GITHUB_OUTPUT"
+
+          if [ "$DESTROY" != "false" ]; then
+            echo "destroy.conf is set to destroy=true. Deployment is blocked."
+            exit 1
+          fi
+
+          echo "action=$ACTION"
+          echo "deploy_target=$DEPLOY_TARGET"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: us-east-1
+
+      - name: Read OpenTofu outputs from S3
+        id: outputs
+        run: |
+          test -n "$TOFU_STATE_BUCKET" || (echo "Missing GitHub variable TOFU_STATE_BUCKET" && exit 1)
+          aws s3 cp "s3://$TOFU_STATE_BUCKET/$TOFU_OUTPUTS_KEY" outputs.json
+
+          jq -e \
+            '.aws_region.value
+             and .blue_public_ip.value
+             and .green_public_ip.value
+             and .alb_dns_name.value
+             and .alb_listener_arn.value
+             and .blue_target_group_arn.value
+             and .green_target_group_arn.value' outputs.json >/dev/null
+
+          echo "aws_region=$(jq -r '.aws_region.value' outputs.json)" >> "$GITHUB_OUTPUT"
+          echo "blue_ec2_host=$(jq -r '.blue_public_ip.value' outputs.json)" >> "$GITHUB_OUTPUT"
+          echo "green_ec2_host=$(jq -r '.green_public_ip.value' outputs.json)" >> "$GITHUB_OUTPUT"
+          echo "alb_dns_name=$(jq -r '.alb_dns_name.value' outputs.json)" >> "$GITHUB_OUTPUT"
+          echo "alb_listener_arn=$(jq -r '.alb_listener_arn.value' outputs.json)" >> "$GITHUB_OUTPUT"
+          echo "blue_target_group_arn=$(jq -r '.blue_target_group_arn.value' outputs.json)" >> "$GITHUB_OUTPUT"
+          echo "green_target_group_arn=$(jq -r '.green_target_group_arn.value' outputs.json)" >> "$GITHUB_OUTPUT"
+
+  lint:
+    name: Code Quality (flake8)
+    runs-on: ubuntu-latest
+    needs: config
+    if: ${{ needs.config.outputs.action != 'switch_only' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run linter
+        run: |
+          flake8 tests/ conftest.py \
+            --max-line-length=100 \
+            --ignore=E302,W503
+
+  test:
+    name: Automated Tests (pytest)
+    runs-on: ubuntu-latest
+    needs:
+      - config
+      - lint
+    if: ${{ needs.config.outputs.action != 'switch_only' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run tests with coverage
+        run: |
+          pytest tests/ -v --tb=short --cov=app --cov-report=xml --cov-report=term
+
+  docker-build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs:
+      - config
+      - test
+    if: ${{ needs.config.outputs.action != 'switch_only' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t techstyle:${{ github.sha }} .
+
+      - name: Smoke test container
+        run: |
+          docker run -d --name techstyle-smoke -p 5001:5001 techstyle:${{ github.sha }}
+          for i in {1..12}; do
+            if curl -fsS http://localhost:5001/api/products >/tmp/products.json; then
+              python -m json.tool /tmp/products.json >/dev/null
+              docker logs techstyle-smoke
+              exit 0
+            fi
+            echo "Waiting for container ($i/12)..."
+            sleep 5
+          done
+          docker logs techstyle-smoke
+          exit 1
+
+  deploy:
+    name: Deploy to ${{ needs.config.outputs.deploy_target }}
+    runs-on: ubuntu-latest
+    needs:
+      - config
+      - docker-build
+    if: ${{ needs.config.outputs.action != 'switch_only' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select blue-green target
+        env:
+          DEPLOY_TARGET: ${{ needs.config.outputs.deploy_target }}
+          BLUE_EC2_HOST: ${{ needs.config.outputs.blue_ec2_host }}
+          GREEN_EC2_HOST: ${{ needs.config.outputs.green_ec2_host }}
+          BLUE_TARGET_GROUP_ARN: ${{ needs.config.outputs.blue_target_group_arn }}
+          GREEN_TARGET_GROUP_ARN: ${{ needs.config.outputs.green_target_group_arn }}
+        run: |
+          if [ "$DEPLOY_TARGET" = "blue" ]; then
+            echo "EC2_HOST=$BLUE_EC2_HOST" >> "$GITHUB_ENV"
+            echo "TARGET_GROUP_ARN=$BLUE_TARGET_GROUP_ARN" >> "$GITHUB_ENV"
+          else
+            echo "EC2_HOST=$GREEN_EC2_HOST" >> "$GITHUB_ENV"
+            echo "TARGET_GROUP_ARN=$GREEN_TARGET_GROUP_ARN" >> "$GITHUB_ENV"
+          fi
+          echo "TARGET_COLOR=$DEPLOY_TARGET" >> "$GITHUB_ENV"
+
+      - name: Validate deployment configuration
+        env:
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+        run: |
+          test -n "$EC2_HOST" || (echo "Missing EC2 host for selected deployment target" && exit 1)
+          test -n "$TARGET_GROUP_ARN" || (echo "Missing target group ARN for selected deployment target" && exit 1)
+          test -n "$EC2_SSH_KEY" || (echo "Missing GitHub secret EC2_SSH_KEY" && exit 1)
+
+      - name: Prepare SSH key
+        env:
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/ec2_key
+          chmod 600 ~/.ssh/ec2_key
+          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
+
+      - name: Deploy Docker Compose application
+        env:
+          EC2_USER: ubuntu
+          KEY_PATH: /home/runner/.ssh/ec2_key
+          REMOTE_DIR: /home/ubuntu/techstyle
+        run: |
+          chmod +x deploy_docker.sh
+          ./deploy_docker.sh
+
+      - name: Direct health check on target instance
+        env:
+          EC2_USER: ubuntu
+          KEY_PATH: /home/runner/.ssh/ec2_key
+        run: |
+          SERVER="$EC2_USER@$EC2_HOST"
+
+          for i in {1..12}; do
+            if ssh -i "$KEY_PATH" -o StrictHostKeyChecking=accept-new "$SERVER" \
+              "curl -fsS http://localhost:5001/api/products" >/tmp/products.json; then
+              python -m json.tool /tmp/products.json >/dev/null
+              echo "$TARGET_COLOR environment is healthy"
+              exit 0
+            fi
+
+            echo "Waiting for $TARGET_COLOR to become ready ($i/12)..."
+            sleep 5
+          done
+
+          echo "$TARGET_COLOR health check failed"
+          exit 1
+
+  switch:
+    name: Switch ALB to ${{ needs.config.outputs.deploy_target }}
+    runs-on: ubuntu-latest
+    needs:
+      - config
+      - deploy
+    if: ${{ always() && (needs.config.outputs.action == 'deploy_and_switch' || needs.config.outputs.action == 'switch_only') && (needs.config.outputs.action == 'switch_only' || needs.deploy.result == 'success') }}
+
+    steps:
+      - name: Select blue-green target
+        env:
+          DEPLOY_TARGET: ${{ needs.config.outputs.deploy_target }}
+          BLUE_TARGET_GROUP_ARN: ${{ needs.config.outputs.blue_target_group_arn }}
+          GREEN_TARGET_GROUP_ARN: ${{ needs.config.outputs.green_target_group_arn }}
+        run: |
+          if [ "$DEPLOY_TARGET" = "blue" ]; then
+            echo "TARGET_GROUP_ARN=$BLUE_TARGET_GROUP_ARN" >> "$GITHUB_ENV"
+          else
+            echo "TARGET_GROUP_ARN=$GREEN_TARGET_GROUP_ARN" >> "$GITHUB_ENV"
+          fi
+          echo "TARGET_COLOR=$DEPLOY_TARGET" >> "$GITHUB_ENV"
+
+      - name: Configure AWS credentials for ALB switch
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ needs.config.outputs.aws_region }}
+
+      - name: Switch ALB traffic
+        env:
+          ALB_LISTENER_ARN: ${{ needs.config.outputs.alb_listener_arn }}
+        run: |
+          test -n "$ALB_LISTENER_ARN" || (echo "Missing ALB listener ARN" && exit 1)
+          test -n "$TARGET_GROUP_ARN" || (echo "Missing target group ARN for $TARGET_COLOR" && exit 1)
+
+          aws elbv2 modify-listener \
+            --listener-arn "$ALB_LISTENER_ARN" \
+            --default-actions Type=forward,TargetGroupArn="$TARGET_GROUP_ARN"
+
+          echo "ALB traffic switched to $TARGET_COLOR"
+
+      - name: ALB health check
+        env:
+          ALB_DNS_NAME: ${{ needs.config.outputs.alb_dns_name }}
+        run: |
+          test -n "$ALB_DNS_NAME" || (echo "Missing ALB DNS name" && exit 1)
+
+          for i in {1..12}; do
+            if curl -fsS "http://$ALB_DNS_NAME/api/products" >/tmp/products.json; then
+              python -m json.tool /tmp/products.json >/dev/null
+              echo "ALB health check successful"
+              exit 0
+            fi
+
+            echo "Waiting for ALB to route traffic ($i/12)..."
+            sleep 5
+          done
+
+          echo "ALB health check failed"
+          exit 1

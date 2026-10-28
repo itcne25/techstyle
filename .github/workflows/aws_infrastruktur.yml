@@ -1,0 +1,124 @@
+name: AWS Infrastruktur bereitstellen
+
+on:
+  push:
+    branches:
+      - day_8_solution
+    paths:
+      - ".github/workflows/aws_infrastruktur.yml"
+      - "infrastruktur/**"
+  workflow_dispatch:
+
+jobs:
+  config:
+    name: Konfiguration lesen
+    runs-on: ubuntu-latest
+    outputs:
+      destroy: ${{ steps.config.outputs.destroy }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read destroy flag
+        id: config
+        run: |
+          test -f infrastruktur/destroy.conf || (echo "Missing infrastruktur/destroy.conf" && exit 1)
+          grep -Eq '^destroy=(true|false)$' infrastruktur/destroy.conf || (echo "destroy.conf must contain destroy=true or destroy=false" && exit 1)
+          DESTROY="$(cut -d= -f2 infrastruktur/destroy.conf)"
+          echo "destroy=$DESTROY" >> "$GITHUB_OUTPUT"
+          echo "destroy=$DESTROY"
+
+  tofu:
+    name: OpenTofu apply
+    runs-on: ubuntu-latest
+    needs: config
+    if: ${{ needs.config.outputs.destroy == 'false' }}
+
+    env:
+      TF_IN_AUTOMATION: "true"
+      TF_VAR_student_name: day8-solution
+      TOFU_STATE_BUCKET: ${{ vars.TOFU_STATE_BUCKET }}
+      TOFU_STATE_KEY: techstyle/day_8_solution/infrastruktur.tfstate
+      TOFU_OUTPUTS_KEY: techstyle/day_8_solution/outputs.json
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: Set up OpenTofu
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: "1.8.0"
+
+      - name: Ensure OpenTofu state bucket exists
+        run: |
+          test -n "$TOFU_STATE_BUCKET" || (echo "Missing GitHub variable TOFU_STATE_BUCKET" && exit 1)
+
+          if aws s3api head-bucket --bucket "$TOFU_STATE_BUCKET" 2>/dev/null; then
+            echo "State bucket already exists: $TOFU_STATE_BUCKET"
+            exit 0
+          fi
+
+          if [ "${{ vars.AWS_REGION || 'us-east-1' }}" = "us-east-1" ]; then
+            aws s3api create-bucket --bucket "$TOFU_STATE_BUCKET"
+          else
+            aws s3api create-bucket \
+              --bucket "$TOFU_STATE_BUCKET" \
+              --create-bucket-configuration LocationConstraint=${{ vars.AWS_REGION || 'us-east-1' }}
+          fi
+
+          aws s3api put-bucket-versioning \
+            --bucket "$TOFU_STATE_BUCKET" \
+            --versioning-configuration Status=Enabled
+
+      - name: Prepare SSH public key for cloud-init
+        env:
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+        run: |
+          test -n "$EC2_SSH_KEY" || (echo "Missing GitHub secret EC2_SSH_KEY" && exit 1)
+          mkdir -p ~/.ssh
+          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/ec2_key
+          chmod 600 ~/.ssh/ec2_key
+          ssh-keygen -y -f ~/.ssh/ec2_key > /tmp/techstyle_ec2.pub
+
+      - name: OpenTofu init
+        working-directory: infrastruktur
+        run: |
+          tofu init \
+            -backend-config="bucket=$TOFU_STATE_BUCKET" \
+            -backend-config="key=$TOFU_STATE_KEY" \
+            -backend-config="region=${{ vars.AWS_REGION || 'us-east-1' }}" \
+            -backend-config="encrypt=true"
+
+      - name: OpenTofu validate
+        working-directory: infrastruktur
+        run: tofu validate
+
+      - name: OpenTofu plan
+        working-directory: infrastruktur
+        run: |
+          tofu plan \
+            -var="aws_region=${{ vars.AWS_REGION || 'us-east-1' }}" \
+            -var="ssh_public_key_path=/tmp/techstyle_ec2.pub"
+
+      - name: OpenTofu apply
+        working-directory: infrastruktur
+        run: |
+          tofu apply -auto-approve \
+            -var="aws_region=${{ vars.AWS_REGION || 'us-east-1' }}" \
+            -var="ssh_public_key_path=/tmp/techstyle_ec2.pub"
+
+      - name: Store OpenTofu outputs
+        working-directory: infrastruktur
+        run: |
+          tofu output -json > outputs.json
+          aws s3 cp outputs.json "s3://$TOFU_STATE_BUCKET/$TOFU_OUTPUTS_KEY"
