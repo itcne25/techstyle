@@ -18,6 +18,20 @@ instance/
 .pytest_cache/
 .coverage
 htmlcov/
+coverage.xml
+dist/
+build/
+*.egg-info/
+.scannerwork/
+
+# Local infrastructure and credentials
+*.pem
+*.key
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+terraform.tfvars
 
 # IDEs / Editors
 .vscode/

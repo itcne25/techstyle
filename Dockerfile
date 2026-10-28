@@ -15,7 +15,7 @@ COPY templates ./templates
 COPY static ./static
 COPY --chmod=755 docker/entrypoint.sh /usr/local/bin/techstyle-entrypoint
 
-LABEL org.opencontainers.image.source="https://github.com/tbzdevops/techstyle"
+LABEL org.opencontainers.image.source="https://github.com/itcne25/techstyle"
 USER 10001:10001
 EXPOSE 5001
 ENTRYPOINT ["techstyle-entrypoint"]

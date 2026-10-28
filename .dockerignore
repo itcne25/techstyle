@@ -1,6 +1,11 @@
 .git
 .github
 .claude
+.codex
+.agents
+.aws
+*.pem
+*.key
 .env
 .env.*
 .venv
@@ -15,7 +20,7 @@ coverage.xml
 htmlcov
 tests
 docs
-infrastruktur
+monitoring
 dist
 build
 *.egg-info
