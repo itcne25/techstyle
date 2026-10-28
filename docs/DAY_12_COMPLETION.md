@@ -1,5 +1,7 @@
 # Day 12 — AI in DevOps (Projekt)
 
+> Diese Datei beschreibt die übernommenen Implementierungsartefakte. Die Haken unten sind keine Nachweise eigener PR- oder Eval-Läufe. Die aktuelle Reflexion und offenen Nachweise stehen in [AI_INTEGRATION.md](../AI_INTEGRATION.md) und im [Projektabgleich](PROJECT_AUDIT_DAYS_01_12.md).
+
 ## Umfang
 Zwei Lektionen (90 Min): self-hosted AI-Review-Bot für die TechStyle-Pipeline, ohne
 API-Key. Das Modell (`gemma3:4b`) läuft über Ollama als Service-Container im Runner.

@@ -10,8 +10,8 @@ TechStyle darf dabei keinen externen AI-Dienst erreichen.
 - Läuft bei jedem Pull Request, der Python-Dateien ändert (`opened`, `synchronize`)
 - Das Modell läuft self-hosted im Runner (Ollama als Service-Container), der Code verlässt
   GitHub nicht, es braucht weder Account noch API-Key
-- Modell und Ollama-Image sind auf eine Version gepinnt (`gemma3:4b`, `ollama/ollama:0.34.4`)
-- Schickt nur den Diff der Python-Dateien an das Modell (max. 6000 Zeichen)
+- Modellvariante und Ollama-Image sind fest ausgewählt (`gemma3:4b`, `ollama/ollama:0.34.4`); ein unveränderlicher Modell-Digest ist bislang nicht dokumentiert
+- Schickt nur den Diff der Python-Dateien an das Modell (max. 6000 Bytes)
 - Der System-Prompt liegt versioniert unter `prompts/review-system.md`
 - Postet das Ergebnis als Kommentar im Pull Request, mit dem Hinweis, dass der Review
   AI-generiert und kein Ersatz für menschliches Code Review ist
