@@ -1,0 +1,141 @@
+name: Tag 14 - Deployment auf AWS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: techstyle-production
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: techstyle
+
+jobs:
+  test:
+    name: Test application and container stack
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run application tests
+        run: |
+          python -m pip install -r requirements-container.txt pytest
+          python -m pytest tests/ -v
+      - name: Create disposable Compose secrets
+        run: |
+          python - <<'PY'
+          import secrets
+          from pathlib import Path
+          Path('.env.container').write_text(
+              f'POSTGRES_PASSWORD={secrets.token_hex(32)}\n'
+              f'SECRET_KEY={secrets.token_hex(32)}\n', encoding='utf-8')
+          PY
+      - name: Build and test the running container stack
+        run: |
+          docker compose --env-file .env.container up --build -d --wait --wait-timeout 120
+          python scripts/container_smoke.py
+      - name: Show container logs on failure
+        if: failure()
+        run: docker compose --env-file .env.container logs --no-color
+      - name: Remove test containers and data
+        if: always()
+        run: |
+          if [ -f .env.container ]; then
+            docker compose --env-file .env.container down --volumes --remove-orphans
+          fi
+
+  build:
+    name: Build and push SHA image to ECR
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      image: ${{ steps.image.outputs.image }}
+      registry: ${{ steps.login-ecr.outputs.registry }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure Learner Lab credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Confirm ECR repository exists
+        run: aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" --query 'repositories[0].repositoryName' --output text
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - name: Set immutable image tag
+        id: image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: echo "image=${ECR_REGISTRY}/${ECR_REPOSITORY}:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+      - name: Build and push image
+        env:
+          IMAGE: ${{ steps.image.outputs.image }}
+        run: |
+          docker build --tag "$IMAGE" .
+          docker push "$IMAGE"
+
+  deploy:
+    name: Deploy image to EC2 with Compose
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure Learner Lab credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Prepare SSH and server configuration
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          EC2_KNOWN_HOSTS: ${{ secrets.EC2_KNOWN_HOSTS }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          IMAGE: ${{ needs.build.outputs.image }}
+        run: |
+          set -euo pipefail
+          test -n "$EC2_HOST"
+          test -n "$EC2_SSH_PRIVATE_KEY"
+          test -n "$EC2_KNOWN_HOSTS"
+          [[ "$POSTGRES_PASSWORD" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$SECRET_KEY" =~ ^[0-9a-f]{64}$ ]]
+          umask 077
+          printf '%s\n' "$EC2_SSH_PRIVATE_KEY" > "$RUNNER_TEMP/techstyle-ssh-key"
+          printf '%s\n' "$EC2_KNOWN_HOSTS" > "$RUNNER_TEMP/techstyle-known-hosts"
+          printf 'POSTGRES_PASSWORD=%s\nSECRET_KEY=%s\nTECHSTYLE_IMAGE=%s\n' \
+            "$POSTGRES_PASSWORD" "$SECRET_KEY" "$IMAGE" > "$RUNNER_TEMP/techstyle.env"
+      - name: Copy Compose configuration and deploy
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          ECR_REGISTRY: ${{ needs.build.outputs.registry }}
+        run: |
+          set -euo pipefail
+          key="$RUNNER_TEMP/techstyle-ssh-key"
+          hosts="$RUNNER_TEMP/techstyle-known-hosts"
+          ssh -i "$key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$hosts" "ubuntu@$EC2_HOST" 'mkdir -p ~/techstyle'
+          scp -i "$key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$hosts" docker-compose.prod.yml "ubuntu@$EC2_HOST:~/techstyle/docker-compose.prod.yml"
+          scp -i "$key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$hosts" "$RUNNER_TEMP/techstyle.env" "ubuntu@$EC2_HOST:~/techstyle/.env.next"
+          aws ecr get-login-password --region "$AWS_REGION" | ssh -i "$key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$hosts" "ubuntu@$EC2_HOST" "docker login --username AWS --password-stdin '$ECR_REGISTRY'"
+          ssh -i "$key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$hosts" "ubuntu@$EC2_HOST" 'cd ~/techstyle && chmod 600 .env.next && docker compose --env-file .env.next -f docker-compose.prod.yml pull && mv .env.next .env && docker compose --env-file .env -f docker-compose.prod.yml up -d --no-build --wait --wait-timeout 180 && curl --fail --silent --show-error http://127.0.0.1/healthz'
+          curl --fail --silent --show-error --retry 5 --retry-delay 3 "http://$EC2_HOST/healthz"
+      - name: Remove temporary SSH and Compose secrets
+        if: always()
+        run: rm -f "$RUNNER_TEMP/techstyle-ssh-key" "$RUNNER_TEMP/techstyle-known-hosts" "$RUNNER_TEMP/techstyle.env"

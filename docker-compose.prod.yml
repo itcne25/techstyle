@@ -1,0 +1,37 @@
+services:
+  web:
+    image: ${TECHSTYLE_IMAGE:?Set TECHSTYLE_IMAGE in .env}
+    restart: unless-stopped
+    ports:
+      - "80:5001"
+    environment:
+      DATABASE_URL: postgresql+psycopg://techstyle:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/techstyle
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env}
+      FLASK_DEBUG: "0"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5001/healthz', timeout=3).read()"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: techstyle
+      POSTGRES_USER: techstyle
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+
+volumes:
+  postgres-data:
