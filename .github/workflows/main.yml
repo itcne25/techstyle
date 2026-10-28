@@ -1,0 +1,35 @@
+name: Main Pipeline
+
+on: [push]
+
+jobs:
+  check-workflows:
+    runs-on: ubuntu-latest
+    outputs:
+      lint: ${{ steps.check.outputs.lint }}
+      test: ${{ steps.check.outputs.test }}
+      build: ${{ steps.check.outputs.build }}
+      deploy: ${{ steps.check.outputs.deploy }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash .github/scripts/check-workflows.sh
+
+  lint:
+    if: needs.check-workflows.outputs.lint == 'true'
+    needs: check-workflows
+    uses: ./.github/workflows/lint.yml
+
+  test:
+    if: needs.check-workflows.outputs.test == 'true'
+    needs: [check-workflows, lint]
+    uses: ./.github/workflows/test.yml
+
+  build:
+    if: needs.check-workflows.outputs.build == 'true'
+    needs: [check-workflows, test]
+    uses: ./.github/workflows/build.yml
+
+  deploy:
+    if: needs.check-workflows.outputs.deploy == 'true'
+    needs: [check-workflows, build]
+    uses: ./.github/workflows/deploy.yml
