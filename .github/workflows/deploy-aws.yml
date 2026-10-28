@@ -115,11 +115,24 @@ jobs:
           IMAGE: ${{ needs.build.outputs.image }}
         run: |
           set -euo pipefail
-          test -n "$EC2_HOST"
-          test -n "$EC2_SSH_PRIVATE_KEY"
-          test -n "$EC2_KNOWN_HOSTS"
-          [[ "$POSTGRES_PASSWORD" =~ ^[0-9a-f]{64}$ ]]
-          [[ "$SECRET_KEY" =~ ^[0-9a-f]{64}$ ]]
+          for secret_name in EC2_HOST EC2_SSH_PRIVATE_KEY EC2_KNOWN_HOSTS POSTGRES_PASSWORD SECRET_KEY; do
+            if [[ -z "${!secret_name}" ]]; then
+              echo "::error title=Missing repository secret::$secret_name is empty or not set"
+              exit 1
+            fi
+          done
+          if [[ ! "$POSTGRES_PASSWORD" =~ ^[0-9a-f]{64}$ ]]; then
+            echo '::error title=Invalid repository secret::POSTGRES_PASSWORD must be exactly 64 lowercase hexadecimal characters'
+            exit 1
+          fi
+          if [[ ! "$SECRET_KEY" =~ ^[0-9a-f]{64}$ ]]; then
+            echo '::error title=Invalid repository secret::SECRET_KEY must be exactly 64 lowercase hexadecimal characters'
+            exit 1
+          fi
+          if [[ "$POSTGRES_PASSWORD" == "$SECRET_KEY" ]]; then
+            echo '::error title=Invalid repository secrets::POSTGRES_PASSWORD and SECRET_KEY must be different'
+            exit 1
+          fi
           umask 077
           printf '%s\n' "$EC2_SSH_PRIVATE_KEY" > "$RUNNER_TEMP/techstyle-ssh-key"
           printf '%s\n' "$EC2_KNOWN_HOSTS" > "$RUNNER_TEMP/techstyle-known-hosts"
