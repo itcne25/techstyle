@@ -2,7 +2,7 @@
 
 ## Ausgangsstand
 
-**Weg A:** Dieses Team-Repository (`main`) wird weitergeführt. Es enthält bereits den Tag-13-Stand mit `Dockerfile`, einem Compose-Stack aus `web` und PostgreSQL-`db` sowie `/healthz`. Es war deshalb kein Wechsel auf einen Musterlösungsbranch nötig. Für den Server kommt `docker-compose.prod.yml` hinzu: Das Webimage wird aus ECR gezogen, statt auf EC2 gebaut zu werden. Der interne Webport bleibt 5001; öffentlich ist Port 80 erreichbar. Tests laufen mit `python -m pip install -r requirements-container.txt pytest` und `python -m pytest tests/ -v`.
+**Weg A:** Dieses Team-Repository (`main`) wird weitergeführt. Es enthält bereits den Tag-13-Stand mit `Dockerfile`, einem Compose-Stack aus `web` und PostgreSQL-`db` sowie `/healthz`. Es war deshalb kein Wechsel auf einen Musterlösungsbranch nötig. Für den Server kommt `docker-compose.prod.yml` hinzu: Das Webimage wird aus ECR gezogen, statt auf EC2 gebaut zu werden. Der interne Webport bleibt 5001; öffentlich ist Port 80 erreichbar. Tests laufen mit `python -m pip install -r requirements-container.txt pytest` und `python -m pytest tests/ -v`. Das bereits angelegte ECR-Repository heisst `ts/prod-images` statt `techstyle` wie in der Aufgaben-Vorlage.
 
 ## Pipeline-Architektur
 
@@ -14,13 +14,14 @@ flowchart LR
     D --> E[HTTP-Healthcheck auf Port 80]
 ```
 
-Der Workflow `.github/workflows/deploy-aws.yml` verknüpft die Jobs mit `needs`. Schlagen Tests oder der Container-Smoketest fehl, wird kein Image veröffentlicht. ECR speichert das Image unter `techstyle:<vollständiger Commit-SHA>`; damit ist der ausgerollte Code eindeutig zuordenbar. Der Deployment-Job kopiert nur Compose und eine zur Laufzeit erzeugte `.env` auf EC2, meldet Docker an ECR an und startet den Stack mit `--wait`. Das PostgreSQL-Volume bleibt bei einem Imagewechsel erhalten. Ein lokaler und ein öffentlicher Healthcheck müssen erfolgreich sein, bevor der Lauf grün wird.
+Der Workflow `.github/workflows/deploy-aws.yml` verknüpft die Jobs mit `needs`. Schlagen Tests oder der Container-Smoketest fehl, wird kein Image veröffentlicht. ECR speichert das Image unter `ts/prod-images:<vollständiger Commit-SHA>`; damit ist der ausgerollte Code eindeutig zuordenbar. Bei einem erneut ausgeführten älteren Lauf wird das vorhandene SHA-Image wiederverwendet, weil das Repository unveränderliche Tags verwendet. Der Deployment-Job kopiert nur Compose und eine zur Laufzeit erzeugte `.env` auf EC2, meldet Docker an ECR an und startet den Stack mit `--wait`. Das PostgreSQL-Volume bleibt bei einem Imagewechsel erhalten. Ein lokaler und ein öffentlicher Healthcheck müssen erfolgreich sein, bevor der Lauf grün wird.
 
 ## Einmalige Einrichtung im Learner Lab
 
-1. Lab starten, Region `us-east-1` wählen und in ECR ein **privates** Repository `techstyle` anlegen.
-2. Eine Ubuntu-24.04-EC2-Instanz `techstyle-prod` mit Typ `t3.small` und Key Pair `vockey` starten. SSH möglichst auf die benötigten Quelladressen begrenzen; HTTP (Port 80) für den Shop öffnen. Als User Data den Inhalt von `scripts/ec2-user-data.sh` verwenden. Nach dem ersten Start prüfen: `ssh -i labsuser.pem ubuntu@<IP> docker compose version`.
-3. In **GitHub → Settings → Secrets and variables → Actions** diese Repository-Secrets setzen:
+1. Lab starten, Region `us-east-1` wählen. Das private ECR-Repository `ts/prod-images` ist bereits angelegt.
+2. Eine Ubuntu-24.04-EC2-Instanz `techstyle-prod` mit Typ `t3.small`, Key Pair `vockey` und automatisch zugewiesener öffentlicher IPv4-Adresse starten. Als User Data den Inhalt von `scripts/ec2-user-data.sh` verwenden. Nach dem ersten Start prüfen: `ssh -i labsuser.pem ubuntu@<IP> docker compose version`.
+3. Security Group für diese Übung: eingehend TCP 80 von `0.0.0.0/0` für den öffentlichen Shop und TCP 22 von `0.0.0.0/0` für das Deployment per GitHub-Runner. Die Runner-IP wechselt; «My IP» für SSH allein lässt die Pipeline scheitern. Die offene SSH-Regel ist nur für die kurze Lab-Übung geeignet. Für einen länger betriebenen Dienst SSH per kurzlebiger Runner-IP-Regel oder über einen festen Runner/SSM absichern. Eingehend weder 5001 noch 5432 öffnen: Docker veröffentlicht nur Port 80, PostgreSQL bleibt intern. Ausgehend kann die Standardregel für den Download von Paketen und Images bestehen bleiben.
+4. In **GitHub → Settings → Secrets and variables → Actions** diese Repository-Secrets setzen:
 
 | Secret | Inhalt |
 | --- | --- |
@@ -41,7 +42,7 @@ Ein Push auf `main` startet den Workflow **Tag 14 - Deployment auf AWS**. Der er
 
 Bei einer neuen Lab-Session die drei `AWS_*`-Secrets erneuern. Falls die Instanz eine neue IP hat, `EC2_HOST` und die IP in `EC2_KNOWN_HOSTS` aktualisieren. Die SSH- und Datenbank-Secrets bleiben nur gültig, solange Instanz, Key Pair und Datenbank-Volume dieselben sind. Für Logs: `ssh -i labsuser.pem ubuntu@<EC2_HOST>` und danach `cd ~/techstyle && docker compose --env-file .env -f docker-compose.prod.yml logs --tail 50 web`. Den Zustand zeigt derselbe Befehl mit `ps` statt `logs --tail 50 web`.
 
-Für ein Rollback den erfolgreichen Workflowlauf eines älteren Commits in GitHub Actions mit **Re-run all jobs** erneut ausführen. Der SHA dieses Laufs wird wieder nach ECR gepusht und auf EC2 ausgerollt. Danach Shop und `/healthz` erneut prüfen. Das ist ein Image-Rollback; Datenbankschema und Daten werden dadurch nicht zurückgesetzt. Für spätere Schemaänderungen braucht es einen separaten Migrations- und Rollback-Plan.
+Für ein Rollback den erfolgreichen Workflowlauf eines älteren Commits in GitHub Actions mit **Re-run all jobs** erneut ausführen. Der SHA dieses Laufs wird in ECR gefunden und das vorhandene Image auf EC2 ausgerollt. Danach Shop und `/healthz` erneut prüfen. Das ist ein Image-Rollback; Datenbankschema und Daten werden dadurch nicht zurückgesetzt. Für spätere Schemaänderungen braucht es einen separaten Migrations- und Rollback-Plan.
 
 ## Nachweise
 
