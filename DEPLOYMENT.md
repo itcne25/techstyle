@@ -46,12 +46,13 @@ Für ein Rollback den erfolgreichen Workflowlauf eines älteren Commits in GitHu
 
 ## Nachweise
 
-Diese Werte erst nach einem echten AWS-Lauf ergänzen; lokal sind sie nicht nachweisbar.
+Die Angaben stammen aus den GitHub-Actions-Läufen und den Prüfungen auf EC2.
 
-- Grüner Workflowlauf: **ausstehend**
-- ECR-Image-URI mit Commit-SHA: **ausstehend**
-- Öffentliche Shop-URL: **ausstehend**
-- Zweites automatisches Deployment und Rollback: **ausstehend**
+- Erster grüner Workflowlauf: [Versuch 3 des Commits `f822899`](https://github.com/itcne25/techstyle/actions/runs/40673898995).
+- Zweiter grüner Workflowlauf nach sichtbarer Änderung: [Commit `9d260c1`](https://github.com/itcne25/techstyle/actions/runs/40686928216). Vorher fehlte die Überschrift „TechStyle Collection“, danach war sie auf EC2 sichtbar.
+- ECR-Image-URI des zweiten Laufs: `524744059708.dkr.ecr.us-east-1.amazonaws.com/ts/prod-images:9d260c1efbb7810ec06dac8eab669bfcbe3b4e9b`.
+- Shop-URL: <http://13.218.35.147/>; der Shop wurde im Browser geöffnet. `/healthz` antwortete auf EC2 mit `{"status":"ok"}`. Der öffentliche Healthcheck des GitHub-Workflows war erfolgreich.
+- Rollback auf `f822899`: **ausstehend**.
 
 ## Ausblick: ECS
 
